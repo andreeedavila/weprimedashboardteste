@@ -61,7 +61,7 @@ canvas { max-height:160px; margin-top:10px; }
 
 <div class="container" id="areaExport">
 
-<h2 id="tituloPeriodo">Fluxo de Caixa - WePrime</h2>
+<h2 id="tituloPeriodo">DASHBOARD WEPRIME</h2>
 
 <div style="display:flex; gap:20px;">
 
@@ -251,15 +251,37 @@ function ler(file){
 }
 
 // ===== MODAL =====
+
+
+
 function abrirDetalhe(lista, tipo){
  modal.style.display="flex";
  modalTitulo.innerText=tipo;
 
+ let total = lista.reduce((a,b)=>a+b.valor,0);
+
+ let header = tipo === "Contas a Receber"
+   ? "<tr><th>CLIENTE</th><th>DOCUMENTO</th><th>VALOR</th></tr>"
+   : "<tr><th>FORNECEDOR</th><th>DOCUMENTO</th><th>VALOR</th></tr>";
+
+ let linhas = lista.map(x=>`
+   <tr>
+     <td>${x.nome||"-"}</td>
+     <td>${x.doc||"-"}</td>
+     <td>${moeda(x.valor)}</td>
+   </tr>
+ `).join("");
+
  modalConteudo.innerHTML = lista.length === 0
  ? "<p>Sem registros</p>"
- : lista.map(x=>`
-   <p>${x.nome||"-"} | ${x.doc||"-"} | ${moeda(x.valor)}</p>
-  `).join("");
+ : `
+   <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+     ${header}
+     ${linhas}
+   </table>
+   <hr>
+   <b>Total: ${moeda(total)}</b>
+ `;
 }
 
 modal.onclick = () => modal.style.display="none";
@@ -353,8 +375,8 @@ async function processar(){
  prevSaldo.innerText = moeda(saldoFinal);
  prevLimite.innerText = moeda(limiteFinal);
 
- tituloResumo.innerText = "Previsões de " + formatarDataBR(dataInicio.value) + " até " + formatarDataBR(dataFim.value);
- tituloPeriodo.innerText = "Fluxo de Caixa ("+formatarDataBR(dataInicio.value)+" até "+formatarDataBR(dataFim.value)+")";
+ tituloResumo.innerText = "Previsões de " + dataInicio.value.split("-").reverse().join("-") + " até " + dataFim.value.split("-").reverse().join("-");
+ tituloPeriodo.innerText = "DASHBOARD WEPRIME ("+dataInicio.value.split("-").reverse().join("-")+" até "+dataFim.value.split("-").reverse().join("-")+")";
 
  if(window.c1) c1.destroy();
  if(window.c2) c2.destroy();
