@@ -183,17 +183,24 @@ function encontrarCabecalho(arr){
  return 0;
 }
 
+
 function mapear(headers){
  let m={};
  headers.forEach((h,i)=>{
   let t=normalizar(h);
+
   if(t.includes("venc")||t.includes("previs")) m.data=i;
   if(t.includes("valor")) m.valor=i;
   if(t.includes("nome")||t.includes("fantasia")) m.nome=i;
-  if(t.includes("nota")||t.includes("doc")||t.includes("numero")) m.doc=i;
+
+  // 🔥 AJUSTE EXATO PELO PRINT
+  if(t.includes("nota fiscal") || t.includes("cupom")) m.nf=i;
+  if(t.includes("numero do documento") || t.includes("número do documento")) m.doc=i;
  });
  return m;
 }
+
+
 
 function tratar(arr){
  let cab=encontrarCabecalho(arr);
@@ -211,16 +218,25 @@ function tratar(arr){
    ? new Date((data-25569)*86400*1000)
    : new Date(data);
 
+  let nf = (map.nf !== undefined) ? l[map.nf] : "";
+  let doc = (map.doc !== undefined) ? l[map.doc] : "";
+
+  let documento = "";
+  if(nf && String(nf).trim() !== "") documento = String(nf).replace(/^0+/, '');
+  else if(doc && String(doc).trim() !== "") documento = doc;
+  else documento = "NÃO PREENCHIDO";
+
   res.push({
    data:d.toISOString().split("T")[0],
    valor:Number(valor),
    nome:l[map.nome]||"",
-   doc:l[map.doc]||""
+   doc:documento
   });
  });
 
  return res;
 }
+
 
 function ler(file){
  return new Promise(r=>{
