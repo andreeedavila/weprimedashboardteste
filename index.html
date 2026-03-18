@@ -12,18 +12,16 @@
 body { font-family: Arial; background:#0f172a; color:#e5e7eb; padding:20px; }
 .container { max-width:1200px; margin:auto; }
 
-.cards { display:flex; gap:8px; margin:10px 0; }
 .card {
  background:#1e293b;
- padding:8px;
- border-radius:6px;
- flex:1;
- font-size:12px;
+ padding:10px;
+ border-radius:8px;
+ font-size:13px;
  border-left:3px solid #d4af37;
- text-align:center;
+ margin-bottom:10px;
 }
 
-input, button, select {
+input, button {
  padding:8px;
  margin:5px;
  background:#1e293b;
@@ -32,36 +30,38 @@ input, button, select {
 }
 
 table { width:100%; border-collapse:collapse; margin-top:20px; }
-td, th { padding:8px; border-bottom:1px solid #334155; text-align:center; }
+td, th { padding:8px; border-bottom:1px solid #334155; text-align:center; cursor:pointer; }
 
 .negativo { color:#ef4444; }
 
-canvas { max-height:220px; }
+canvas { max-height:160px; margin-top:10px; }
 
-.modal {
+/* Modal */
+#modal {
+ display:none;
  position:fixed;
  top:0; left:0;
  width:100%; height:100%;
  background:rgba(0,0,0,0.8);
- display:none;
  justify-content:center;
  align-items:center;
 }
-.modal-content {
+.modal-box{
  background:#1e293b;
  padding:20px;
  border-radius:10px;
  max-height:80%;
  overflow:auto;
+ width:400px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="container">
+<div class="container" id="areaExport">
 
-<h2>📊 Fluxo de Caixa - WePrime</h2>
+<h2 id="tituloPeriodo">Fluxo de Caixa - WePrime</h2>
 
 <div style="display:flex; gap:20px;">
 
@@ -69,20 +69,19 @@ canvas { max-height:220px; }
 <h3>Bancos</h3>
 <div id="bancos"></div>
 <button onclick="addBanco()">+ Banco</button>
-
-<h3>Filtrar por Banco</h3>
-<select id="filtroBanco">
-<option value="todos">Todos</option>
-</select>
 </div>
 
 <div style="flex:1;">
-<h3>Resumo do Período</h3>
+<h3 id="tituloResumo">Previsões do Período</h3>
+
 <div class="card">
-Recebido<br><b id="resR">R$0</b><br>
-Pago<br><b id="resP">R$0</b><br>
-Saldo<br><b id="resS">R$0</b>
+Pagar<br><b id="prevPagar">R$0</b><br>
+Receber<br><b id="prevReceber">R$0</b><br>
+Resultado<br><b id="prevResultado">R$0</b><br>
+Saldo Final<br><b id="prevSaldo">R$0</b><br>
+Limite Disponível<br><b id="prevLimite">R$0</b>
 </div>
+
 </div>
 
 </div>
@@ -96,14 +95,8 @@ Receber: <input type="file" id="fileReceber">
 Pagar: <input type="file" id="filePagar">
 
 <br>
-<button onclick="processar()">Gerar Dashboard</button>
-<button onclick="exportar()">Exportar Imagem</button>
-
-<div class="cards">
-<div class="card">Recebido<br><b id="totalR">R$0</b></div>
-<div class="card">Pago<br><b id="totalP">R$0</b></div>
-<div class="card">Saldo<br><b id="saldoResumo">R$0</b></div>
-</div>
+<button onclick="processar()">Gerar</button>
+<button onclick="exportar()">Exportar</button>
 
 <canvas id="graf1"></canvas>
 <canvas id="graf2"></canvas>
@@ -115,6 +108,7 @@ Pagar: <input type="file" id="filePagar">
 <th>Entrada</th>
 <th>Saída</th>
 <th>Saldo</th>
+<th>Limite Disponível</th>
 </tr>
 </thead>
 <tbody id="tabela"></tbody>
@@ -122,8 +116,12 @@ Pagar: <input type="file" id="filePagar">
 
 </div>
 
-<div class="modal" id="modal">
-<div class="modal-content" id="modalContent"></div>
+<!-- Modal -->
+<div id="modal">
+ <div class="modal-box">
+  <h3 id="modalTitulo"></h3>
+  <div id="modalConteudo"></div>
+ </div>
 </div>
 
 <script>
@@ -132,125 +130,86 @@ function moeda(v){
  return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v);
 }
 
-function normalizar(txt){
- return String(txt).toLowerCase()
- .normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function formatarDataBR(data){
+ let d = new Date(data);
+ return String(d.getDate()).padStart(2,'0')+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+d.getFullYear();
+}
+
+function formatarMoeda(input){
+ let negativo=input.value.startsWith("-");
+ let v=input.value.replace(/[^\d]/g,"");
+ if(v===""){ input.value=negativo?"-":""; return;}
+ v=(v/100).toFixed(2).replace(".",",");
+ v=v.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+ input.value=(negativo?"-R$ ":"R$ ")+v;
+}
+
+function parseMoeda(v){
+ if(!v) return 0;
+ let neg=v.includes("-");
+ let n=v.replace(/[^\d]/g,"");
+ n=Number(n)/100;
+ return neg?-n:n;
 }
 
 function addBanco(){
  let div=document.createElement("div");
-
  div.innerHTML=`
- <input placeholder="Banco" oninput="atualizarFiltro()">
+ <input placeholder="Banco">
  <input placeholder="Saldo" oninput="formatarMoeda(this)">
  <input placeholder="Limite" oninput="formatarMoeda(this)">
- <button onclick="this.parentElement.remove(); atualizarFiltro()">X</button>
- `;
-
+ <button onclick="this.parentElement.remove()">X</button>`;
  bancos.appendChild(div);
 }
 
-function atualizarFiltro(){
- let select = filtroBanco;
- select.innerHTML = `<option value="todos">Todos</option>`;
-
- let linhas = bancos.children;
-
- for(let l of linhas){
-  let nome = l.children[0].value;
-  if(nome){
-   let opt = document.createElement("option");
-   opt.value = nome;
-   opt.text = nome;
-   select.appendChild(opt);
-  }
+function baseFinanceira(){
+ let saldo=0, limite=0;
+ for(let b of bancos.children){
+  saldo+=parseMoeda(b.children[1].value);
+  limite+=parseMoeda(b.children[2].value);
  }
+ return {saldo, limite};
 }
 
-function parseMoeda(valor){
- if(!valor) return 0;
- let negativo = valor.includes("-");
- let num = valor.replace(/[^\d]/g,"");
- num = Number(num)/100;
- return negativo ? -num : num;
+function normalizar(txt){
+ return String(txt).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
-function formatarMoeda(input){
- let v=input.value.replace(/\D/g,"");
- v=(v/100).toFixed(2)+"";
- v=v.replace(".",",");
- v=v.replace(/\B(?=(\d{3})+(?!\d))/g,".");
- input.value="R$ "+v;
-}
-
-function saldoInicial(){
- let total=0;
- let filtro = filtroBanco.value;
-
- let linhas=bancos.children;
-
- for(let l of linhas){
-  let nome = l.children[0].value;
-
-  if(filtro !== "todos" && nome !== filtro) continue;
-
-  let saldo=parseMoeda(l.children[1].value||"0");
-  let limite=parseMoeda(l.children[2].value||"0");
-
-  total+=saldo+limite;
- }
-
- return total;
-}
-
-function encontrarCabecalho(array){
- for(let i=0;i<array.length;i++){
-  let linha=array[i].map(c=>normalizar(c));
-  if(linha.some(c=>c.includes("venc")||c.includes("previs"))){
-   return i;
-  }
+function encontrarCabecalho(arr){
+ for(let i=0;i<arr.length;i++){
+  let l=arr[i].map(c=>normalizar(c));
+  if(l.some(c=>c.includes("venc")||c.includes("previs"))) return i;
  }
  return 0;
 }
 
 function mapear(headers){
- let map={};
-
+ let m={};
  headers.forEach((h,i)=>{
   let t=normalizar(h);
-
-  if(t.includes("venc")||t.includes("previs")) map.data=i;
-  if(t.includes("valor")) map.valor=i;
-  if(t.includes("nome")||t.includes("fantasia")) map.nome=i;
-  if(t.includes("nota")||t.includes("doc")||t.includes("numero")) map.doc=i;
+  if(t.includes("venc")||t.includes("previs")) m.data=i;
+  if(t.includes("valor")) m.valor=i;
+  if(t.includes("nome")||t.includes("fantasia")) m.nome=i;
+  if(t.includes("nota")||t.includes("doc")||t.includes("numero")) m.doc=i;
  });
-
- return map;
+ return m;
 }
 
-function tratar(array){
-
- let cab=encontrarCabecalho(array);
- let headers=array[cab];
- let dados=array.slice(cab+1);
-
+function tratar(arr){
+ let cab=encontrarCabecalho(arr);
+ let headers=arr[cab];
+ let dados=arr.slice(cab+1);
  let map=mapear(headers);
 
  let res=[];
-
  dados.forEach(l=>{
-
   let data=l[map.data];
   let valor=l[map.valor];
+  if(!data||!valor) return;
 
-  if(!data || !valor) return;
-
-  let d;
-  if(typeof data==="number"){
-   d=new Date((data-25569)*86400*1000);
-  } else {
-   d=new Date(data);
-  }
+  let d=typeof data==="number"
+   ? new Date((data-25569)*86400*1000)
+   : new Date(data);
 
   res.push({
    data:d.toISOString().split("T")[0],
@@ -258,29 +217,39 @@ function tratar(array){
    nome:l[map.nome]||"",
    doc:l[map.doc]||""
   });
-
  });
 
  return res;
 }
 
 function ler(file){
- return new Promise(resolve=>{
-  let reader=new FileReader();
-  reader.onload=e=>{
+ return new Promise(r=>{
+  let fr=new FileReader();
+  fr.onload=e=>{
    let wb=XLSX.read(e.target.result,{type:'array'});
-   let sheet=wb.Sheets[wb.SheetNames[0]];
-   let arr=XLSX.utils.sheet_to_json(sheet,{header:1});
-   resolve(arr);
+   let sh=wb.Sheets[wb.SheetNames[0]];
+   r(XLSX.utils.sheet_to_json(sh,{header:1}));
   };
-  reader.readAsArrayBuffer(file);
+  fr.readAsArrayBuffer(file);
  });
 }
 
-async function processar(){
+// ===== MODAL =====
+function abrirDetalhe(lista, tipo){
+ modal.style.display="flex";
+ modalTitulo.innerText=tipo;
 
- let inicio=dataInicio.value;
- let fim=dataFim.value;
+ modalConteudo.innerHTML = lista.length === 0
+ ? "<p>Sem registros</p>"
+ : lista.map(x=>`
+   <p>${x.nome||"-"} | ${x.doc||"-"} | ${moeda(x.valor)}</p>
+  `).join("");
+}
+
+modal.onclick = () => modal.style.display="none";
+
+// ===== PROCESSAR =====
+async function processar(){
 
  let r=await ler(fileReceber.files[0]);
  let p=await ler(filePagar.files[0]);
@@ -288,54 +257,68 @@ async function processar(){
  let receber=tratar(r);
  let pagar=tratar(p);
 
- let saldo=saldoInicial();
+ let inicio=new Date(dataInicio.value);
+ let fim=new Date(dataFim.value);
+
+ let base=baseFinanceira();
+ let saldo=base.saldo;
+ let limiteTotal = base.limite + (base.saldo<0 ? Math.abs(base.saldo) : 0);
+
+ let totalRec=0, totalPag=0;
 
  tabela.innerHTML="";
-
- let totalR=0,totalP=0;
 
  let labels=[], entradas=[], saidas=[], saldos=[];
 
  let d=new Date(inicio);
 
- while(d<=new Date(fim)){
+ while(d<=fim){
 
   let data=d.toISOString().split("T")[0];
 
-  let ent=receber.filter(x=>x.data==data);
-  let sai=pagar.filter(x=>x.data==data);
+  let entList=receber.filter(x=>x.data==data);
+  let saiList=pagar.filter(x=>x.data==data);
 
-  let vEnt=ent.reduce((a,b)=>a+b.valor,0);
-  let vSai=sai.reduce((a,b)=>a+b.valor,0);
+  let vEnt=entList.reduce((a,b)=>a+b.valor,0);
+  let vSai=saiList.reduce((a,b)=>a+b.valor,0);
 
-  totalR+=vEnt;
-  totalP+=vSai;
+  totalRec+=vEnt;
+  totalPag+=vSai;
 
   saldo+=vEnt-vSai;
 
+  let limiteDisponivel = limiteTotal - Math.abs(saldo);
+  if(limiteDisponivel < 0) limiteDisponivel = 0;
+
   let tr=document.createElement("tr");
 
-  tr.innerHTML=`
-  <td>${data}</td>
-  <td>${moeda(vEnt)}</td>
-  <td>${moeda(vSai)}</td>
-  <td class="${saldo<0?'negativo':''}">${moeda(saldo)}</td>`;
+  let tdData=document.createElement("td");
+  tdData.innerText=formatarDataBR(data);
 
-  tr.ondblclick=()=>{
-   modal.style.display="flex";
+  let tdEnt=document.createElement("td");
+  tdEnt.innerText=moeda(vEnt);
+  tdEnt.onclick=()=>abrirDetalhe(entList,"Contas a Receber");
 
-   let lista = ent.length > 0 ? ent : sai;
+  let tdSai=document.createElement("td");
+  tdSai.innerText=moeda(vSai);
+  tdSai.onclick=()=>abrirDetalhe(saiList,"Contas a Pagar");
 
-   modalContent.innerHTML =
-   "<h3>Detalhes</h3>" +
-   lista.map(x=>`
-    <p>${x.nome || "-"} | ${x.doc || "-"} | ${moeda(x.valor)}</p>
-   `).join("");
-  };
+  let tdSaldo=document.createElement("td");
+  tdSaldo.innerText=moeda(saldo);
+  if(saldo<0) tdSaldo.classList.add("negativo");
+
+  let tdLimite=document.createElement("td");
+  tdLimite.innerText=moeda(limiteDisponivel);
+
+  tr.appendChild(tdData);
+  tr.appendChild(tdEnt);
+  tr.appendChild(tdSai);
+  tr.appendChild(tdSaldo);
+  tr.appendChild(tdLimite);
 
   tabela.appendChild(tr);
 
-  labels.push(data);
+  labels.push(formatarDataBR(data));
   entradas.push(vEnt);
   saidas.push(vSai);
   saldos.push(saldo);
@@ -343,44 +326,41 @@ async function processar(){
   d.setDate(d.getDate()+1);
  }
 
- totalR.innerText=moeda(totalR);
- totalP.innerText=moeda(totalP);
- saldoResumo.innerText=moeda(totalR-totalP);
+ let resultado = totalRec - totalPag;
+ let saldoFinal = base.saldo + resultado;
+ let limiteFinal = limiteTotal - Math.abs(saldoFinal);
+ if(limiteFinal < 0) limiteFinal = 0;
 
- resR.innerText=moeda(totalR);
- resP.innerText=moeda(totalP);
- resS.innerText=moeda(totalR-totalP);
+ prevPagar.innerText = moeda(totalPag);
+ prevReceber.innerText = moeda(totalRec);
+ prevResultado.innerText = moeda(resultado);
+ prevSaldo.innerText = moeda(saldoFinal);
+ prevLimite.innerText = moeda(limiteFinal);
 
- if(window.chart1) chart1.destroy();
- if(window.chart2) chart2.destroy();
+ tituloResumo.innerText = "Previsões de " + formatarDataBR(dataInicio.value) + " até " + formatarDataBR(dataFim.value);
+ tituloPeriodo.innerText = "Fluxo de Caixa ("+formatarDataBR(dataInicio.value)+" até "+formatarDataBR(dataFim.value)+")";
 
- window.chart1 = new Chart(graf1,{
-  type:'line',
-  data:{labels,datasets:[
-   {label:"Entradas",data:entradas},
-   {label:"Saídas",data:saidas}
-  ]}
- });
+ if(window.c1) c1.destroy();
+ if(window.c2) c2.destroy();
 
- window.chart2 = new Chart(graf2,{
-  type:'line',
-  data:{labels,datasets:[
-   {label:"Saldo",data:saldos}
-  ]}
- });
+ window.c1=new Chart(graf1,{type:'line',data:{labels,datasets:[
+  {label:"Entradas",data:entradas},
+  {label:"Saídas",data:saidas}
+ ]}});
 
+ window.c2=new Chart(graf2,{type:'line',data:{labels,datasets:[
+  {label:"Saldo",data:saldos}
+ ]}});
 }
 
 function exportar(){
- html2canvas(document.body).then(canvas=>{
-  let link=document.createElement("a");
-  link.download="fluxo_weprime.png";
-  link.href=canvas.toDataURL();
-  link.click();
+ html2canvas(document.getElementById("areaExport")).then(c=>{
+  let a=document.createElement("a");
+  a.href=c.toDataURL();
+  a.download="fluxo.png";
+  a.click();
  });
 }
-
-modal.onclick=()=>modal.style.display="none";
 
 </script>
 
